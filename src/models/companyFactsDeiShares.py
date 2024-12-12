@@ -8,6 +8,13 @@ def millions_formater(x, pos):
     return f"{x/1e6:,.0f}M"
 
 
+def is_strictly_decreasing(arr):
+    for i in range(1, len(arr)):
+        if arr[i] >= arr[i - 1]:
+            return False
+    return True
+
+
 formatter = FuncFormatter(millions_formater)
 
 headers = {"User-Agent": "alpenchev@yahoo.com"}
@@ -19,43 +26,12 @@ companyTickers = requests.get(
 companyData = pd.DataFrame.from_dict(companyTickers.json(), orient="index")
 companyData["cik_str"] = companyData["cik_str"].astype(str).str.zfill(10)
 
-ticker = "CRWD"
+ticker = "TSAT"
 cik = companyData[companyData["ticker"] == f"{ticker}"]["cik_str"][0]
-
-# filingMetadata = requests.get(
-#     f"https://data.sec.gov/submissions/CIK{cik}.json", headers=headers
-# )
-
-# print(filingMetadata.json().keys())
-# filingMetadata.json()["filings"]
-# filingMetadata.json()["filings"].keys()
-# filingMetadata.json()["filings"]["files"]
-# filingMetadata.json()["filings"]["recent"]
-# filingMetadata.json()["filings"]["recent"].keys()
-
-# allForms = pd.DataFrame.from_dict(filingMetadata.json()["filings"]["recent"])
-# quarterly_filings = allForms[allForms["form"] == "10-Q"]
-
-# allForms.columns
-# allForms[["accessionNumber", "reportDate", "form"]].head(50)
 
 companyFacts = requests.get(
     f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", headers=headers
 )
-
-companyFacts.json().keys()
-companyFacts.json()["facts"]
-companyFacts.json()["facts"].keys()  # dei, us-gaap
-# COMPANY FACTS DEI
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"].keys()
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"][
-    "shares"
-]
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"][
-    "shares"
-][0]
 
 sh_out = pd.DataFrame.from_dict(
     companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"][
@@ -63,7 +39,7 @@ sh_out = pd.DataFrame.from_dict(
     ]
 )
 
-sh_out_qly = sh_out[sh_out["form"] == "10-Q"]
+sh_out_qly = sh_out[sh_out["form"] == "10-K"]
 
 sh_out_qly_date = pd.to_datetime(sh_out_qly["end"])
 sh_out_qly_date = sh_out_qly_date.dt.strftime("%m/%y")
@@ -84,78 +60,17 @@ ax.tick_params(axis="y", labelsize=8)
 plt.title(f"{ticker}")
 plt.show()
 
-# COMPANY FACTS DEI, US-GAAP
-companyFacts.json()["facts"]["us-gaap"]
-usGAAP = companyFacts.json()["facts"]["us-gaap"].keys()
 
-usGAAP_df = pd.DataFrame(usGAAP, columns=["Values"])
+# Run below in full block after running libraries on top
+headers = {"User-Agent": "alpenchev@yahoo.com"}
 
-usGAAP_sharerepurchase = usGAAP_df[
-    usGAAP_df["Values"].str.contains("sharerepurchase", case=False, na=False)
-]
-usGAAP_shares = usGAAP_df[
-    usGAAP_df["Values"].str.contains("shares", case=False, na=False)
-]
-
-companyFacts.json()["facts"]["us-gaap"]["CommonStockSharesOutstanding"]
-companyFacts.json()["facts"]["us-gaap"][
-    "WeightedAverageNumberOfDilutedSharesOutstanding"
-]
-companyFacts.json()["facts"]["us-gaap"]["WeightedAverageNumberOfSharesOutstandingBasic"]
-
-# companyFacts = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json" dei, us-gaap
-# companyConcept = "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}
-#     /us-gaap/WeightedAverageNumberOfSharesOutstandingBasic.json"
-
-shareType = "WeightedAverageNumberOfSharesOutstandingBasic"
-
-companyConcept = requests.get(
-    (
-        f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}"
-        f"/us-gaap/{shareType}.json"
-    ),
-    headers=headers,
+companyTickers = requests.get(
+    "https://www.sec.gov/files/company_tickers.json", headers=headers
 )
 
-companyConcept.json().keys()
-companyConcept.json()["units"]
-companyConcept.json()["units"].keys()
-companyConcept.json()["units"]["shares"]
-companyConcept.json()["units"]["shares"][0]
+companyData = pd.DataFrame.from_dict(companyTickers.json(), orient="index")
+companyData["cik_str"] = companyData["cik_str"].astype(str).str.zfill(10)
 
-sharesData = pd.DataFrame.from_dict((companyConcept.json()["units"]["shares"]))
-
-sharesData.columns
-sharesData.form
-len(sharesData)
-
-shares10Q = sharesData[sharesData.form == "10-Q"]
-sharesOnly1 = sharesData[sharesData["val"] == 1]
-
-shares10Q = shares10Q[2:]
-sharesOnly1 = shares10Q[shares10Q["val"] == 1]
-if shareType == "CommonStockSharesOutstanding":
-    commShOut = shares10Q.iloc[:, :2]
-elif shareType == "WeightedAverageNumberOfSharesOutstandingBasic":
-    commShOut = shares10Q.iloc[:, 1:3]
-
-commShOut = commShOut.drop_duplicates(subset=["end"])
-commShOutQtrs = commShOut.tail(40)
-
-fix, ax = plt.subplots()
-plt.plot(commShOutQtrs["end"], commShOutQtrs["val"])
-
-ax.yaxis.set_major_formatter(formatter)
-plt.xticks(rotation=45)
-ax.set_xlabel("dates", fontsize="small")
-ax.tick_params(axis="x", labelsize=8)
-
-ax.set_ylabel("shares", fontsize="small")
-ax.tick_params(axis="y", labelsize=8)
-plt.title(f"{ticker}")
-plt.show()
-
-# Loop for all S&P500 tickers
 sp_tickers = [
     "MMM",
     "AOS",
@@ -660,10 +575,11 @@ sp_tickers = [
     "ZBRA",
 ]
 
+sp_tickers = ["MO", "XOM", "GL", "LUMN", "MPW", "TSAT"]
+# ticker = "TSAT"
+sh_out_key = "EntityCommonStockSharesOutstanding"
 sh_decreased_tickers = {}
 
-# sp_tickers = ["ANSS", "CRWD", "JPM"]
-# ticker = "CRWD"
 for ticker in sp_tickers:
     print(f"{ticker}")
 
@@ -671,46 +587,58 @@ for ticker in sp_tickers:
 
     if not filtered_data.empty and "cik_str" in filtered_data.columns:
         cik = companyData[companyData["ticker"] == f"{ticker}"]["cik_str"].iloc[0]
-
-        companyConcept = requests.get(
-            (
-                f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}"
-                f"/us-gaap/{shareType}.json"
-            ),
-            headers=headers,
+        companyFacts = requests.get(
+            f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", headers=headers
         )
 
-        if companyConcept.headers.get("Content-Type") == "application/json":
-            sharesData = pd.DataFrame.from_dict(
-                (companyConcept.json()["units"]["shares"])
-            )
+        if companyFacts.headers.get("Content-Type") == "application/json":
+            facts_keys = companyFacts.json()["facts"].keys()
+            if "dei" in facts_keys:
+                facts_dict = companyFacts.json()["facts"]["dei"]
+                # dei_dict = companyFacts.json()["facts"]["dei"]
 
-            shares10Q = sharesData[sharesData.form == "10-Q"]
-            if shareType == "CommonStockSharesOutstanding":
-                commShOut = shares10Q.iloc[:, :2]
-            elif shareType == "WeightedAverageNumberOfSharesOutstandingBasic":
-                commShOut = shares10Q.iloc[:, 1:3]
-            commShOut = commShOut.drop_duplicates(subset=["end"])
-            commShOutQtrs = commShOut.tail(40)
+                if sh_out_key in facts_dict:
+                    eqCommStockShOut = pd.DataFrame.from_dict(
+                        companyFacts.json()["facts"]["dei"][
+                            "EntityCommonStockSharesOutstanding"
+                        ]
+                    )
 
-            qly_date = pd.to_datetime(commShOutQtrs["end"])
-            qly_date = qly_date.dt.strftime("%m/%y")
-            qly_out_shares = [float(x) for x in commShOutQtrs["val"]]
+                    sharesData = pd.DataFrame.from_dict(
+                        (eqCommStockShOut["units"]["shares"])
+                    )
+                    annual_sharesData = sharesData[sharesData["form"] == "10-Q"]
 
-            if len(qly_out_shares) > 0:
-                beg_shares = qly_out_shares[0]
-                end_shares = qly_out_shares[len(qly_out_shares) - 1]
+                    annual_date = pd.to_datetime(annual_sharesData["end"])
+                    annual_date = annual_date.dt.strftime("%m/%y")
+                    annual_out_shares = [float(x) for x in annual_sharesData["val"]]
 
-                if beg_shares > 0:
-                    perc_change = (end_shares / beg_shares - 1) * 100
+                    if len(annual_out_shares) > 0:
+                        beg_shares = annual_out_shares[0]
+                        end_shares = annual_out_shares[len(annual_out_shares) - 1]
 
-                    if perc_change < 0:
-                        key = f"{ticker}"
-                        sh_decreased_tickers.update({key: perc_change})
+                        if beg_shares > 0:
+                            perc_change = (end_shares / beg_shares - 1) * 100
+
+                            # if perc_change < 0:
+                            #     key = f"{ticker}"
+                            #     sh_decreased_tickers.update({key: perc_change})
+                            key = f"{ticker}"
+                            sh_decreased_tickers.update({key: perc_change})
+                        else:
+                            print(f"{ticker} beg_shares = 0")
+                    else:
+                        print(f"{ticker} annual_out_shares is empty")
+
                 else:
-                    print(f"{ticker} beg_shares = 0")
+                    print(f"{ticker} EntityCommonStockSharesOutstanding does not exist")
+            elif "ifrs-full" in facts_keys:
+                facts_dict = companyFacts.json()["facts"]["ifrs-full"]
+                print(
+                    f"{ticker} ifrs-full in companyFacts.json()[facts]. Foreign located?"
+                )
             else:
-                print(f"{ticker} annual_out_shares is empty")
+                print(f"{ticker} No dei or ifrs-full in companyFacts.json()[facts]")
         else:
             print(
                 f'{ticker} companyFacts.headers.get("Content-Type") not "application/json"'
@@ -721,10 +649,8 @@ for ticker in sp_tickers:
 sh_decreased_tickers_df = pd.DataFrame(
     sh_decreased_tickers.items(), columns=["Ticker", "Share Reduction"]
 )
-
 sorted_sh_decreased_tickers_df = sh_decreased_tickers_df.sort_values(
     by="Share Reduction", ascending=True
 )
-
 print(sorted_sh_decreased_tickers_df)
-sorted_sh_decreased_tickers_df.to_csv("sorted_sh_decreased_tickers_df.csv")
+# sorted_sh_decreased_tickers_df.to_csv("sorted_sh_decreased_tickers_df.csv")
