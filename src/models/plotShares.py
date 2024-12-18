@@ -1,162 +1,7 @@
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
 
-
-def millions_formater(x, pos):
-    return f"{x/1e6:,.0f}M"
-
-
-formatter = FuncFormatter(millions_formater)
-
-headers = {"User-Agent": "alpenchev@yahoo.com"}
-
-companyTickers = requests.get(
-    "https://www.sec.gov/files/company_tickers.json", headers=headers
-)
-
-companyData = pd.DataFrame.from_dict(companyTickers.json(), orient="index")
-companyData["cik_str"] = companyData["cik_str"].astype(str).str.zfill(10)
-
-ticker = "WMT"
-cik = companyData[companyData["ticker"] == f"{ticker}"]["cik_str"][0]
-
-# filingMetadata = requests.get(
-#     f"https://data.sec.gov/submissions/CIK{cik}.json", headers=headers
-# )
-
-# print(filingMetadata.json().keys())
-# filingMetadata.json()["filings"]
-# filingMetadata.json()["filings"].keys()
-# filingMetadata.json()["filings"]["files"]
-# filingMetadata.json()["filings"]["recent"]
-# filingMetadata.json()["filings"]["recent"].keys()
-
-# allForms = pd.DataFrame.from_dict(filingMetadata.json()["filings"]["recent"])
-# quarterly_filings = allForms[allForms["form"] == "10-Q"]
-
-# allForms.columns
-# allForms[["accessionNumber", "reportDate", "form"]].head(50)
-
-# 1. Chart shares based on companyFacts - dei
-companyFacts = requests.get(
-    f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", headers=headers
-)
-
-companyFacts.json().keys()
-companyFacts.json()["facts"]
-companyFacts.json()["facts"].keys()  # dei, us-gaap
-# COMPANY FACTS DEI
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"].keys()
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"][
-    "shares"
-]
-companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"][
-    "shares"
-][0]
-
-sh_out = pd.DataFrame.from_dict(
-    companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"][
-        "shares"
-    ]
-)
-
-sh_out_qly = sh_out[sh_out["form"] == "10-Q"]
-
-sh_out_qly_date = pd.to_datetime(sh_out_qly["end"])
-sh_out_qly_date = sh_out_qly_date.dt.strftime("%m/%y")
-sh_out_qly_count = [float(x) for x in sh_out_qly["val"]]
-
-sh_out_qly_df = pd.DataFrame(index=sh_out_qly_date, data=sh_out_qly_count)
-
-fix, ax = plt.subplots()
-plt.plot(sh_out_qly_df)
-
-ax.yaxis.set_major_formatter(formatter)
-plt.xticks(rotation=45)
-ax.set_xlabel("dates", fontsize="small")
-ax.tick_params(axis="x", labelsize=8)
-
-ax.set_ylabel("shares", fontsize="small")
-ax.tick_params(axis="y", labelsize=8)
-plt.title(f"{ticker}")
-plt.show()
-
-# 2. Chart shares based on companyConcepts - us-gaap
-companyFacts.json()["facts"]["us-gaap"]
-usGAAP = companyFacts.json()["facts"]["us-gaap"].keys()
-
-usGAAP_df = pd.DataFrame(usGAAP, columns=["Values"])
-
-usGAAP_sharerepurchase = usGAAP_df[
-    usGAAP_df["Values"].str.contains("sharerepurchase", case=False, na=False)
-]
-usGAAP_shares = usGAAP_df[
-    usGAAP_df["Values"].str.contains("shares", case=False, na=False)
-]
-
-companyFacts.json()["facts"]["us-gaap"]["CommonStockSharesOutstanding"]
-companyFacts.json()["facts"]["us-gaap"][
-    "WeightedAverageNumberOfDilutedSharesOutstanding"
-]
-companyFacts.json()["facts"]["us-gaap"]["WeightedAverageNumberOfSharesOutstandingBasic"]
-
-# companyFacts = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json" dei, us-gaap
-# companyConcept = "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}
-#     /us-gaap/WeightedAverageNumberOfSharesOutstandingBasic.json"
-
-shareType = "WeightedAverageNumberOfSharesOutstandingBasic"
-
-companyConcept = requests.get(
-    (
-        f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}"
-        f"/us-gaap/{shareType}.json"
-    ),
-    headers=headers,
-)
-
-companyConcept.json().keys()
-companyConcept.json()["units"]
-companyConcept.json()["units"].keys()
-companyConcept.json()["units"]["shares"]
-companyConcept.json()["units"]["shares"][0]
-
-sharesData = pd.DataFrame.from_dict((companyConcept.json()["units"]["shares"]))
-
-sharesData.columns
-sharesData.form
-len(sharesData)
-
-shares10Q = sharesData[sharesData.form == "10-Q"]
-sharesOnly1 = sharesData[sharesData["val"] == 1]
-
-shares10Q = shares10Q[2:]
-sharesOnly1 = shares10Q[shares10Q["val"] == 1]
-if shareType == "CommonStockSharesOutstanding":
-    commShOut = shares10Q.iloc[:, :2]
-elif shareType == "WeightedAverageNumberOfSharesOutstandingBasic":
-    commShOut = shares10Q.iloc[:, 1:3]
-
-commShOut = commShOut.drop_duplicates(subset=["end"])
-commShOutQtrs = commShOut.tail(40)
-
-fix, ax = plt.subplots()
-plt.plot(commShOutQtrs["end"], commShOutQtrs["val"])
-
-ax.yaxis.set_major_formatter(formatter)
-plt.xticks(rotation=45)
-ax.set_xlabel("dates", fontsize="small")
-ax.tick_params(axis="x", labelsize=8)
-
-ax.set_ylabel("shares", fontsize="small")
-ax.tick_params(axis="y", labelsize=8)
-plt.title(f"{ticker}")
-plt.show()
-
-# 3. Shows percent reduction in shares based on companyConcepts - us-gaap
 headers = {"User-Agent": "alpenchev@yahoo.com"}
 companyTickers = requests.get(
     "https://www.sec.gov/files/company_tickers.json", headers=headers
@@ -676,7 +521,7 @@ shareType = "WeightedAverageNumberOfSharesOutstandingBasic"
 numQters = 12  # last 3 years
 sh_decreased_tickers = {}
 sharesByQtrs = pd.DataFrame()
-
+dfs = []
 ticker = "AAP"
 for ticker in sp_tickers:
     print(f"{ticker}")
@@ -706,30 +551,9 @@ for ticker in sp_tickers:
                 commShOut = shares10Q.iloc[:, 1:3]
             commShOut = commShOut.drop_duplicates(subset=["end"])
             commShOutQtrs = commShOut.tail(numQters)
+            temp = commShOutQtrs.rename(columns={"val": f"{ticker}"})
+            dfs.append(temp)
 
-            sharesByQtrs = sharesByQtrs.reset_index(drop=True)
-            qly_date = pd.to_datetime(commShOutQtrs["end"])
-            qly_date = qly_date.dt.strftime("%m/%y")
-            qly_out_shares = [float(x) for x in commShOutQtrs["val"]]
-
-            if len(qly_out_shares) > 0:
-                beg_shares = qly_out_shares[0]
-                end_shares = qly_out_shares[len(qly_out_shares) - 1]
-
-                if beg_shares > 0:
-                    perc_change = (end_shares / beg_shares - 1) * 100
-
-                    # if perc_change < 0:
-                    #     key = f"{ticker}"
-                    #     sh_decreased_tickers.update({key: perc_change})
-
-                    key = f"{ticker}"
-                    sh_decreased_tickers.update({key: perc_change})
-                else:
-                    print(f"{ticker} beg_shares = 0")
-
-            else:
-                print(f"{ticker} annual_out_shares is empty")
         else:
             print(
                 f'{ticker} companyFacts.headers.get("Content-Type") not "application/json"'
@@ -737,13 +561,34 @@ for ticker in sp_tickers:
     else:
         print(f'{ticker} companyData[companyData["ticker"] does not exist')
 
-sh_decreased_tickers_df = pd.DataFrame(
-    sh_decreased_tickers.items(), columns=["Ticker", "Share Reduction"]
-)
+df_combined = dfs[0]
+df_combined = df_combined.reset_index(drop=True)
 
-sorted_sh_decreased_tickers_df = sh_decreased_tickers_df.sort_values(
-    by="Share Reduction", ascending=True
-)
+for df in dfs[1:]:
+    ticker = df.columns[1]
 
-print(sorted_sh_decreased_tickers_df)
-# sorted_sh_decreased_tickers_df.to_csv("sorted_sh_decreased_tickers_df.csv")
+    df_combined = pd.concat(
+        [df_combined, df[[f"{ticker}"]].reset_index(drop=True)], axis=1
+    )
+
+print(df_combined)
+df_combined["end"] = pd.to_datetime(df_combined["end"])
+numeric_cols = df_combined.select_dtypes(include=["number"])
+
+df_standardized = (numeric_cols - numeric_cols.mean()) / numeric_cols.std()
+df_standardized = pd.concat([df_standardized, df_combined["end"]], axis=1)
+df_standardized.set_index("end", inplace=True)
+
+print(df_standardized)
+
+
+plt.figure(figsize=(10, 5))
+for column in df_standardized.columns:
+    plt.plot(df_standardized.index, df_standardized[column], label=column, marker="o")
+
+plt.title("Shares By Quarter")
+plt.xlabel("Quarter End")
+plt.ylabel("Shares")
+plt.legend()
+plt.grid(True)
+plt.show()
