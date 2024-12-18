@@ -542,7 +542,7 @@ numQters = 16  # last 4 years
 sh_decreased_tickers = {}
 sharesByQtrs = pd.DataFrame()
 dfs = []
-ticker = "MUSA"
+ticker = "NVDA"
 for ticker in sp_tickers:
     print(f"{ticker}")
 
@@ -714,8 +714,153 @@ for ticker, slope in shares_slopes.items():
 
 
 # 2. Get historical prices and find performance against index
-# indexETF = "SPY"
-# ticker = "ICE"
-# data = yf.download(ticker, start="2024-01-01", end="2024-12-13")
+from datetime import date, timedelta
+import holidays
+from dateutil.relativedelta import relativedelta
 
-# print(data.head())
+
+# Function to find the closest previous business day
+def adjust_to_business_day(target_date, holiday_list):
+    while (
+        target_date.weekday() in (5, 6) or target_date in holiday_list
+    ):  # 5 = Saturday, 6 = Sunday
+        target_date -= timedelta(days=1)
+    return target_date
+
+
+indexETF = "SPY"
+ticker = "ICE"
+
+current_date = date.today()
+one_year_ago = current_date - timedelta(days=365)
+
+# Get the list of U.S. federal holidays for the relevant year
+us_holidays = holidays.UnitedStates(years=[one_year_ago.year])
+
+# Adjust the one-year-ago date to the closest previous business day
+adjusted_one_year_ago = adjust_to_business_day(one_year_ago, us_holidays)
+
+stockPrice = yf.download(
+    ticker,
+    start=f"{adjusted_one_year_ago}",
+    end=f"{adjusted_one_year_ago + relativedelta(days=1)}",
+)["Adj Close"][f"{ticker}"]
+stockPriceBeg = stockPrice.iloc[0]
+
+stockPrice = yf.download(
+    ticker, start=f"{current_date}", end=f"{current_date + relativedelta(days=1)}"
+)["Adj Close"][f"{ticker}"]
+stockPriceEnd = stockPrice.iloc[0]
+
+stockReturnOneYear = (((stockPriceEnd - stockPriceBeg) / stockPriceBeg) * 100).round(2)
+
+indexPrice = yf.download(
+    indexETF,
+    start=f"{adjusted_one_year_ago}",
+    end=f"{adjusted_one_year_ago+ relativedelta(days=1)}",
+)["Adj Close"][f"{indexETF}"]
+indexPriceBeg = indexPrice.iloc[0]
+
+indexPrice = yf.download(
+    indexETF,
+    start=f"{current_date}",
+    end=f"{current_date+ relativedelta(days=1)}",
+)["Adj Close"][f"{indexETF}"]
+indexPriceEnd = indexPrice.iloc[0]
+
+indexReturnOneYear = (((indexPriceEnd - indexPriceBeg) / indexPriceBeg) * 100).round(2)
+
+print(
+    f"{ticker} one year return vs SPY = {(stockReturnOneYear - indexReturnOneYear).round(2)}"
+)
+
+sp_tickers = [
+    "FICO",
+    "APO",
+    "VIRT",
+    "LEN",
+    "MCD",
+    "MRK",
+    "AZO",
+    "LLY",
+    "AMTM",
+    "MUSA",
+    "RL",
+    "ICE",
+    "URI",
+    "JPM",
+]
+# sp_tickers = ["AAP", "CMCSA", "DLTR", "GT", "MKC", "SWBI", "MSFT", "TROW"]
+indexETF = "SPY"
+for ticker in sp_tickers:
+    # print(f"{ticker}")
+
+    current_date = date.today()
+    one_year_ago = current_date - timedelta(days=365)
+
+    # Get the list of U.S. federal holidays for the relevant year
+    us_holidays = holidays.UnitedStates(years=[one_year_ago.year])
+
+    # Adjust the one-year-ago date to the closest previous business day
+    adjusted_one_year_ago = adjust_to_business_day(one_year_ago, us_holidays)
+
+    try:
+        stockPrice = yf.download(
+            ticker,
+            start=f"{adjusted_one_year_ago}",
+            end=f"{adjusted_one_year_ago + relativedelta(days=1)}",
+            progress=False,
+        )["Adj Close"][f"{ticker}"]
+
+        if stockPrice.empty:
+            print(f"{ticker} - No data found for the specified date.")
+        else:
+            stockPrice = yf.download(
+                ticker,
+                start=f"{adjusted_one_year_ago}",
+                end=f"{adjusted_one_year_ago + relativedelta(days=1)}",
+                progress=False,
+            )["Adj Close"][f"{ticker}"]
+            stockPriceBeg = stockPrice.iloc[0]
+
+            stockPrice = yf.download(
+                ticker,
+                start=f"{current_date}",
+                end=f"{current_date + relativedelta(days=1)}",
+                progress=False,
+            )["Adj Close"][f"{ticker}"]
+            stockPriceEnd = stockPrice.iloc[0]
+
+            stockReturnOneYear = (
+                ((stockPriceEnd - stockPriceBeg) / stockPriceBeg) * 100
+            ).round(2)
+
+            indexPrice = yf.download(
+                indexETF,
+                start=f"{adjusted_one_year_ago}",
+                end=f"{adjusted_one_year_ago+ relativedelta(days=1)}",
+                progress=False,
+            )["Adj Close"][f"{indexETF}"]
+            indexPriceBeg = indexPrice.iloc[0]
+
+            indexPrice = yf.download(
+                indexETF,
+                start=f"{current_date}",
+                end=f"{current_date+ relativedelta(days=1)}",
+                progress=False,
+            )["Adj Close"][f"{indexETF}"]
+            indexPriceEnd = indexPrice.iloc[0]
+
+            indexReturnOneYear = (
+                ((indexPriceEnd - indexPriceBeg) / indexPriceBeg) * 100
+            ).round(2)
+
+            if (stockReturnOneYear - indexReturnOneYear) > 0:
+                print(
+                    f"{ticker} one year return vs SPY = {(stockReturnOneYear - indexReturnOneYear).round(2)}"
+                )
+
+    except yf.shared.YFPricesMissingError:
+        print(
+            f"{ticker} -Data could not be retrieved. Check the ticker and date range."
+        )
