@@ -27,7 +27,12 @@ def adjust_to_business_day(target_date, holiday_list):
 with open("../data/tickers.json", "r") as file:
     tickers_object = json.load(file)
 
-tickers = tickers_object["Best2016"]
+tickers = tickers_object["ChatGPT_122224_20_30_toBeDiversified"]
+# S&P500
+# Watch
+# Robinhood
+# Best2016
+# ChatGPT_122224_20_30_toBeDiversified
 
 # 1. Plot the stocks with downward share count
 headers = {"User-Agent": "alpenchev@yahoo.com"}
@@ -44,7 +49,8 @@ numQters = 16  # last 4 years
 sh_decreased_tickers = {}
 sharesByQtrs = pd.DataFrame()
 dfs = []
-# ticker = "NVDA"
+no_data_tickers = []
+ticker = "ARM"
 
 for ticker in tickers:
     # print(f"{ticker}")
@@ -106,8 +112,12 @@ for ticker in tickers:
             commShOut = sharesFilings.loc[:, ["fy", "val"]]
 
             commShOutQtrs = commShOut.tail(numQters)
-            temp = commShOutQtrs.rename(columns={"val": f"{ticker}"})
-            dfs.append(temp)
+            is_empty = commShOutQtrs.empty
+            if not is_empty:
+                temp = commShOutQtrs.rename(columns={"val": f"{ticker}"})
+                dfs.append(temp)
+            else:
+                no_data_tickers.append(ticker)
 
         else:
             print(
@@ -155,14 +165,6 @@ def calculate_trend_line(dataframes):
 shares_slopes, df_with_trends = calculate_trend_line(dfs_standardized)
 steepest_decline = min(shares_slopes.items(), key=lambda x: x[1]["slope"])
 
-# print("Stocks with the steepest share reduction:")
-# print(f"  Product: {steepest_decline[0]}")
-# print(f"  Slope: {steepest_decline[1]['slope']:.4f}")
-
-# print("\nSlopes for all stocks:")
-# for ticker, slope in shares_slopes.items():
-#     print(f"{ticker}: Slope = {slope:.4f}")
-
 shares_slopes_sorted = dict(sorted(shares_slopes.items(), key=lambda x: x[1]["slope"]))
 shares_reduction_slope = pd.DataFrame.from_dict(
     shares_slopes_sorted, orient="index"
@@ -182,12 +184,12 @@ one_year_ago = endDate - timedelta(days=365)
 two_year_ago = endDate - timedelta(days=730)
 adjusted_one_year_ago = adjust_to_business_day(one_year_ago, us_holidays)
 adjusted_two_year_ago = adjust_to_business_day(two_year_ago, us_holidays)
+# return_periods = ["YTD"]
 return_periods = ["YTD", "OneYear", "TwoYears"]
-
 perf_rank = {}
 
 
-def getPeriodReturn(begDate, endDate, period, ticker):
+def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
     try:
         stockPrice = yf.download(
             ticker,
@@ -198,6 +200,20 @@ def getPeriodReturn(begDate, endDate, period, ticker):
 
         if stockPrice.empty:
             print(f"{ticker} - No data found for the specified date.")
+
+            if f"{ticker}" not in perf_rank:
+                perf_rank[f"{ticker}"] = {
+                    f"{period}": {
+                        "Return": 0,
+                        "Return - SPY": 0,
+                    }
+                }
+            else:
+                if f"{period}" not in perf_rank[f"{ticker}"]:
+                    perf_rank[f"{ticker}"][f"{period}"] = {
+                        "Return": 0,
+                        "Return - SPY": 0,
+                    }
         else:
             stockPrice = yf.download(
                 ticker,
@@ -239,36 +255,37 @@ def getPeriodReturn(begDate, endDate, period, ticker):
                 ((indexPriceEnd - indexPriceBeg) / indexPriceBeg) * 100
             ).round(2)
 
-            perf_rank[f"{ticker}"] = {
-                f"{period}": {
-                    "Return": stockReturnOneYear.round(2),
-                    "Return - SPY": (stockReturnOneYear - indexReturnOneYear).round(2),
+            if f"{ticker}" not in perf_rank:
+                perf_rank[f"{ticker}"] = {
+                    f"{period}": {
+                        "Return": stockReturnOneYear.round(2),
+                        "Return - SPY": (stockReturnOneYear - indexReturnOneYear).round(
+                            2
+                        ),
+                    }
                 }
-            }
+            else:
+                if f"{period}" not in perf_rank[f"{ticker}"]:
+                    perf_rank[f"{ticker}"][f"{period}"] = {
+                        "Return": stockReturnOneYear.round(2),
+                        "Return - SPY": (stockReturnOneYear - indexReturnOneYear).round(
+                            2
+                        ),
+                    }
 
-            if (
-                f"{indexETF}" not in perf_rank
-                and f"{indexETF}" not in perf_rank[f"{period}"]
-            ):
+            if f"{indexETF}" not in perf_rank:
                 perf_rank[f"{indexETF}"] = {
                     f"{period}": {
                         "Return": indexReturnOneYear.round(2),
                         "Return - SPY": indexReturnOneYear.round(2),
                     }
                 }
-
-            # {"NVDA": {"YTD": {"Return":22, "Return - SPY":18}, "oneYear": {"Return":22, "Return - SPY":18}},
-            #  "AAP": {"YTD": {"Return":22, "Return - SPY":18}, "oneYear": {"Return":22, "Return - SPY":18}}}
-
-            # print(
-            #     f"{ticker} one year return vs SPY = {(stockReturnOneYear - indexReturnOneYear).round(2)}"
-            # )
-
-            # if (stockReturnOneYear - indexReturnOneYear) > 0:
-            #     print(
-            #         f"{ticker} one year return vs SPY = {(stockReturnOneYear - indexReturnOneYear).round(2)}"
-            #     )
-            # perf_rank[f"{indexETF}"] = indexReturnOneYear.round(2)
+            else:
+                if f"{period}" not in perf_rank[f"{indexETF}"]:
+                    perf_rank[f"{indexETF}"][f"{period}"] = {
+                        "Return": indexReturnOneYear.round(2),
+                        "Return - SPY": indexReturnOneYear.round(2),
+                    }
 
     except requests.exceptions.RequestException as req_err:
         print(f"{ticker} RequestException: {req_err}")
@@ -280,6 +297,8 @@ def getPeriodReturn(begDate, endDate, period, ticker):
         print(f"{ticker} An error occurred: {e}")
 
 
+tickers = [x for x in tickers if x not in no_data_tickers]
+
 for ticker in tickers:
     # print(f"{ticker}")
     for period in return_periods:
@@ -290,14 +309,21 @@ for ticker in tickers:
         elif period == "TwoYears":
             begDate = adjusted_two_year_ago
 
-        getPeriodReturn(begDate, endDate, period, ticker)
+        getPeriodReturn(begDate, endDate, period, ticker, indexETF)
 
 sorted_perf_rank = dict(
-    sorted(perf_rank.items(), key=lambda x: x[1]["Return - SPY"], reverse=True)
+    sorted(perf_rank.items(), key=lambda x: x[1]["YTD"]["Return - SPY"], reverse=True)
 )
 
-perf_rank_df = pd.DataFrame.from_dict(sorted_perf_rank, orient="index")
+perf_rank = {
+    company: {period: values["Return - SPY"] for period, values in company_data.items()}
+    for company, company_data in sorted_perf_rank.items()
+}
+
+perf_rank_df = pd.DataFrame.from_dict(perf_rank, orient="index")
 
 sharesPriceTrack = pd.concat(
-    [perf_rank_df["Return - SPY"], shares_reduction_slope], axis=1
+    [perf_rank_df[["YTD", "OneYear", "TwoYears"]], shares_reduction_slope], axis=1
 )
+
+print(sharesPriceTrack)

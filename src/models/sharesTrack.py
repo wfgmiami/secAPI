@@ -14,7 +14,7 @@ import json
 with open("../data/tickers.json", "r") as file:
     tickers_object = json.load(file)
 
-tickers = tickers_object["Best2016"]
+tickers = tickers_object["Robinhood"]
 
 # 1. Plot the stocks with downward share count
 headers = {"User-Agent": "alpenchev@yahoo.com"}
@@ -31,7 +31,7 @@ numQters = 16  # last 4 years
 sh_decreased_tickers = {}
 sharesByQtrs = pd.DataFrame()
 dfs = []
-ticker = "NVDA"
+# ticker = "NVDA"
 
 for ticker in tickers:
     # print(f"{ticker}")
