@@ -5,7 +5,7 @@ from scipy.stats import linregress
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 import yfinance as yf
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import holidays
 from dateutil.relativedelta import relativedelta
 import json
@@ -15,24 +15,40 @@ year_5yr_ago = current_year - 5
 us_holidays = holidays.UnitedStates(years=[year_5yr_ago, current_year])
 
 
-# Function to find the closest previous business day
-def adjust_to_business_day(target_date, holiday_list):
+def adjust_to_prev_business_day(target_date, holiday_list):
     while (
         target_date.weekday() in (5, 6) or target_date in holiday_list
     ):  # 5 = Saturday, 6 = Sunday
-        target_date -= timedelta(days=1)
+        target_date -= timedelta(days=1)  # Move backword by one day
+    return target_date
+
+
+def adjust_to_next_business_day(target_date, holiday_list):
+    while (
+        target_date.weekday() in (5, 6) or target_date in holiday_list
+    ):  # 5 = Saturday, 6 = Sunday
+        target_date += timedelta(days=1)  # Move forward by one day
     return target_date
 
 
 with open("../data/tickers.json", "r") as file:
     tickers_object = json.load(file)
 
-tickers = tickers_object["ChatGPT_122224_20_30_toBeDiversified"]
+tickers = tickers_object["S&P500"][:41]
 # S&P500
 # Watch
 # Robinhood
 # Best2016
 # ChatGPT_122224_20_30_toBeDiversified
+
+# companyFacts.headers.get("Content-Type") not "application/json":
+# first 20 in S&P500 were good except AMD, AES
+# tickers = [
+#     "MMM",
+#     "ADBE",
+#     "AMD",
+#     "AES",
+# ]
 
 # 1. Plot the stocks with downward share count
 headers = {"User-Agent": "alpenchev@yahoo.com"}
@@ -50,7 +66,7 @@ sh_decreased_tickers = {}
 sharesByQtrs = pd.DataFrame()
 dfs = []
 no_data_tickers = []
-ticker = "ARM"
+# ticker = "ICE"
 
 for ticker in tickers:
     # print(f"{ticker}")
@@ -173,28 +189,31 @@ shares_reduction_slope.rename(
     columns={"slope": f"{numQters/4:.0f} yrs slope"}, inplace=True
 )
 
+# ===========================================================
 # 2. Get historical prices and find performance against index
 indexETF = "SPY"
-# ticker = "CHRT"
-beg_period_date = adjust_to_business_day(date(date.today().year, 1, 2), us_holidays)
-endDate = adjust_to_business_day(date.today(), us_holidays)
+# beg_period_date = adjust_to_next_business_day(
+#     date(date.today().year, 1, 2), us_holidays
+# )
+endDate = adjust_to_prev_business_day(date.today(), us_holidays)
+endDateOffset = adjust_to_next_business_day(
+    (endDate + relativedelta(days=1)), us_holidays
+)
 # In case of a specific date: Year, Month, Day
 # current_date = date(2016, 12, 30)  # must be business date
-one_year_ago = endDate - timedelta(days=365)
-two_year_ago = endDate - timedelta(days=730)
-adjusted_one_year_ago = adjust_to_business_day(one_year_ago, us_holidays)
-adjusted_two_year_ago = adjust_to_business_day(two_year_ago, us_holidays)
 # return_periods = ["YTD"]
 return_periods = ["YTD", "OneYear", "TwoYears"]
 perf_rank = {}
 
 
-def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
+def getPeriodReturn(
+    begDate, endDate, begDateOffset, endDateOffset, period, ticker, indexETF
+):
     try:
         stockPrice = yf.download(
             ticker,
             start=f"{begDate}",
-            end=f"{begDate + relativedelta(days=1)}",
+            end=f"{begDateOffset}",
             progress=False,
         )["Adj Close"][f"{ticker}"]
 
@@ -218,7 +237,7 @@ def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
             stockPrice = yf.download(
                 ticker,
                 start=f"{begDate}",
-                end=f"{begDate + relativedelta(days=1)}",
+                end=f"{begDateOffset}",
                 progress=False,
             )["Adj Close"][f"{ticker}"]
             stockPriceBeg = stockPrice.iloc[0]
@@ -226,7 +245,7 @@ def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
             stockPrice = yf.download(
                 ticker,
                 start=f"{endDate}",
-                end=f"{endDate + relativedelta(days=1)}",
+                end=f"{endDateOffset}",
                 progress=False,
             )["Adj Close"][f"{ticker}"]
             stockPriceEnd = stockPrice.iloc[0]
@@ -238,7 +257,7 @@ def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
             indexPrice = yf.download(
                 indexETF,
                 start=f"{begDate}",
-                end=f"{begDate + relativedelta(days=1)}",
+                end=f"{begDateOffset}",
                 progress=False,
             )["Adj Close"][f"{indexETF}"]
             indexPriceBeg = indexPrice.iloc[0]
@@ -246,7 +265,7 @@ def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
             indexPrice = yf.download(
                 indexETF,
                 start=f"{endDate}",
-                end=f"{endDate + relativedelta(days=1)}",
+                end=f"{endDateOffset}",
                 progress=False,
             )["Adj Close"][f"{indexETF}"]
             indexPriceEnd = indexPrice.iloc[0]
@@ -298,25 +317,37 @@ def getPeriodReturn(begDate, endDate, period, ticker, indexETF):
 
 
 tickers = [x for x in tickers if x not in no_data_tickers]
-
+# ticker = "AMD"
 for ticker in tickers:
     # print(f"{ticker}")
     for period in return_periods:
         if period == "YTD":
-            begDate = beg_period_date
+            begDate = adjust_to_next_business_day(
+                date(date.today().year, 1, 2), us_holidays
+            )
         elif period == "OneYear":
-            begDate = adjusted_one_year_ago
-        elif period == "TwoYears":
-            begDate = adjusted_two_year_ago
+            begDate = adjust_to_next_business_day(
+                endDate - timedelta(days=365), us_holidays
+            )
 
-        getPeriodReturn(begDate, endDate, period, ticker, indexETF)
+        elif period == "TwoYears":
+            begDate = adjust_to_next_business_day(
+                endDate - timedelta(days=730), us_holidays
+            )
+
+        begDateOffset = adjust_to_next_business_day(
+            (begDate + relativedelta(days=1)), us_holidays
+        )
+        getPeriodReturn(
+            begDate, endDate, begDateOffset, endDateOffset, period, ticker, indexETF
+        )
 
 sorted_perf_rank = dict(
-    sorted(perf_rank.items(), key=lambda x: x[1]["YTD"]["Return - SPY"], reverse=True)
+    sorted(perf_rank.items(), key=lambda x: x[1]["OneYear"]["Return"], reverse=True)
 )
 
 perf_rank = {
-    company: {period: values["Return - SPY"] for period, values in company_data.items()}
+    company: {period: values["Return"] for period, values in company_data.items()}
     for company, company_data in sorted_perf_rank.items()
 }
 
@@ -327,3 +358,4 @@ sharesPriceTrack = pd.concat(
 )
 
 print(sharesPriceTrack)
+# sharesPriceTrack.to_csv("shares4yrPrice2yrTrack.csv")

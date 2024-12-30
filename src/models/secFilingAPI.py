@@ -23,7 +23,8 @@ companyTickers = requests.get(
 companyData = pd.DataFrame.from_dict(companyTickers.json(), orient="index")
 companyData["cik_str"] = companyData["cik_str"].astype(str).str.zfill(10)
 
-ticker = "CRWD"
+ticker = "STZ"
+ticker = "ICE"
 cik = companyData[companyData["ticker"] == f"{ticker}"]["cik_str"][0]
 # cik = companyData[0:1].cik_str[0]
 
@@ -52,6 +53,7 @@ companyFacts = requests.get(
 companyFacts.json().keys()
 companyFacts.json()["facts"]
 companyFacts.json()["facts"].keys()
+companyFacts.json()["facts"]["dei"].keys()
 companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]
 companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"].keys()
 companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]
@@ -67,6 +69,24 @@ sh_out = pd.DataFrame.from_dict(
         "shares"
     ]
 )
+
+
+# availableKey = list(companyFacts.json()["facts"]["dei"].keys())[0]
+
+# sh_out = pd.DataFrame.from_dict(
+#     companyFacts.json()["facts"]["dei"][f"{availableKey}"]["units"][
+#         "shares"
+#     ]
+# )
+
+# sh_out = pd.DataFrame.from_dict(companyFacts.json()["facts"]["dei"][f"{availableKey}"]["units"][
+#     "USD"
+# ])
+
+# sh_out_qly = sh_out[sh_out["form"].str.contains("10-Q", na=False)]
+# recent_filings = sh_out_qly[sh_out_qly["fy"] >= 2010]
+# print("Recent 10-Q filings:")
+# print(recent_filings)
 
 sh_out_qly = sh_out[sh_out["form"] == "10-Q"]
 

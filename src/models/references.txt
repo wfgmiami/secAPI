@@ -1,0 +1,212 @@
+Ways to get data out of SEC EDGAR:
+
+Method 1. Submissions Endpoint (submissions.json)
+https://data.sec.gov/submissions/CIK{cik}.json
+
+Method 2. Fetching and Parsing XBRL Directly - deiXBRLfile.py file for code reference
+https://www.sec.gov/Archives/edgar/data/16918/000001691823000005/0000016918-23-000005-index.htm
+https://www.sec.gov/Archives/edgar/data/16918/000001691823000005/stz-20230531_htm.xml
+
+Method 3. Using the SEC’s Company Concept API
+https://data.sec.gov/api/xbrl/companyconcept/CIK/{taxonomy}/{concept}.json
+
+Pre-Aggregated Data - Efficient for Trends
+-This API directly fetches historical data for the specified XBRL concept (e.g., CommonStockSharesOutstanding).
+=Returns data across all filings where the concept is reported.
+-You get a ready-made JSON response with the shares outstanding values over multiple filings,
+eliminating the need to manually process individual filings.
+
+===
+dei:EntityCommonStockSharesOutstanding
+
+dei stands for Disclosure Elements for Industry and is a namespace used in XBRL (eXtensible Business Reporting Language). 
+XBRL is a standardized format for digital reporting of financial data, commonly used in SEC filings such as 10-K and 10-Q. 
+The dei namespace contains elements that describe general company information and metadata required in financial reports.
+
+Also Dei can be:
+Document and Entity Information (DEI) taxonomy data. DEI tags are used for 
+general company-related information (such as company name, CIK, fiscal year, shares outstanding, etc.).
+
+===
+Feature	Submissions (Parsing Text) (method 1)         vs XBRL (Structured Data) (method 2)
+Ease of Use:
+Requires manual or programmatic text parsing.         vs Directly identified and easy to extract.
+
+Reliability:
+Depends on text format consistency.	                  vs Highly reliable due to standardized taxonomy.
+
+Tools Needed:
+HTML/text parsers (e.g., BeautifulSoup).	          vs XBRL/iXBRL parser (e.g., arelle, lxml).
+
+Speed	
+Slower due to the need for keyword searches.          vs Faster as the data is pre-tagged.
+
+Use Case	
+For non-XBRL filings or filings that don’t tag data.  vs For filings with XBRL data (10-K, 10-Q).
+
+
+
+(XBRL Parsing) (method 2)	           vs   Company Concept API (method 3)
+Scope	
+Single filing (specific 10-K/10-Q).	        Multiple filings (historical trends).
+
+Ease of Use	
+Requires locating and parsing XBRL files.	Simplified JSON API response.
+
+Data Availability	
+All XBRL tags in the filing.	            Limited to specific XBRL tags (e.g., shares).
+
+Use Case	
+Deep dive into one filing's details.	    Quick analysis of trends over time.
+
+Effort Required	
+High (manual navigation/parsing).	        Low (automated pre-processed data).
+
+Flexibility	
+High (full XBRL data available).	        Medium (restricted to pre-aggregated concepts).
+
+
+===
+As of 2018, all publicly traded companies in the U.S. are required to file their 10-Q (quarterly reports) 
+and 10-K (annual reports) in XBRL (eXtensible Business Reporting Language) format through the SEC's EDGAR system.
+
+===
+When filings are submitted to the SEC, they can have multiple formats or associated files. 
+The structure of the URL can indicate whether you're dealing with:
+HTML files (e.g., the main index page for a filing) Example: 0000016918-24-000178-index.htm
+XML/XBRL files (for structured data) Example: 0000016918-24-000178_htm.xml
+
+===
+Issues with accessing XBRL files - 
+https://www.sec.gov/Archives/edgar/data/16918/000001691824000178/0000016918-24-000178_htm.xml
+<Message>The specified key does not exist.</Message>
+
+It's possible that the XBRL file you're looking for doesn't use the _htm.xml format. 
+Instead, the XBRL data might be available in a different format or with a different naming convention
+Not every filing is accompanied by an XBRL file, even though the SEC requires XBRL data for some types of filings 
+(like 10-Q and 10-K). 
+It's possible that this particular filing does not have an XBRL file available for download, 
+or it might be in a different format.
+
+===
+Several reasons why some companies might not have data available 
+when querying the SEC's Company Concept API (e.g., for CommonStockSharesOutstanding) using:
+https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/CommonStockSharesOutstanding.json
+
+
+===
+What is the difference between getting outstanding shares using below
+
+companyFacts = requests.get(
+    f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", headers=headers
+)
+companyFacts.json()["facts"]["dei"]["EntityCommonStockSharesOutstanding"]["units"]
+
+and using below
+   companyConcept = requests.get(
+            (
+                f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}"
+                f"/us-gaap/{shareType}.json"
+            ),
+            headers=headers,
+        )
+
+ 1. Using companyfacts (DEI Taxonomy) Endpoint: companyfacts     
+ Key Concept: DEI data focuses on high-level entity information about the company, not detailed financials.
+
+ 2. Using companyconcept (US GAAP Taxonomy) Endpoint: companyconcept
+ Key Concept: The companyconcept endpoint allows you to query specific concepts defined by US GAAP, 
+ such as revenue, assets, liabilities, or shares outstanding under specific reporting contexts.
+
+Which One to Use?
+For General Information: If you're just interested in high-level company details, such as the number of shares outstanding
+without needing the underlying financial context, then the companyfacts endpoint (DEI) is sufficient.
+- Issues with companyFacts:
+1. STZ did not have "EntityCommonStockSharesOutstanding" but "EntityPublicFloat"
+ - EntityPublicFloat seems to be USD (dollar values), not unit shares
+ - There were only 4 old 10-Q available
+
+For Detailed Financial Reporting: If you need detailed financial data for analysis, especially in the context of financial
+statements under US GAAP, then the companyconcept endpoint is more appropriate. 
+It allows you to access specific financial concepts (e.g., shares outstanding in relation to other financial data).
+
+===
+There are several reasons why some companies might not have data available 
+when querying the SEC's Company Concept API (e.g., for CommonStockSharesOutstanding) using:
+https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/CommonStockSharesOutstanding.json
+
+1. The Company Does Not File XBRL Data for That Concept
+Reason: Not all companies report us-gaap:CommonStockSharesOutstanding explicitly in their filings. 
+While XBRL tagging is required, some companies may report the same information under different tags or concepts 
+(e.g., custom tags).
+The Company Concept API only works with standard tags like us-gaap:CommonStockSharesOutstanding. 
+Custom tags are not included.
+
+2. Shares Outstanding May Be Reported Indirectly
+Reason: Some companies do not explicitly tag shares outstanding using XBRL concepts like CommonStockSharesOutstanding.
+Instead:
+Shares outstanding may be included in narrative text (e.g., footnotes, tables) without being separately tagged.
+The Company Concept API cannot retrieve untagged or narrative data.
+
+3. Foreign Private Issuers and Form 20-F Filers
+Reason: Foreign private issuers that file annual reports on Form 20-F or other forms may not use the same XBRL taxonomy.
+Details:
+These companies may use the IFRS taxonomy (instead of US GAAP).
+The API only works for filings tagged using the US GAAP taxonomy, so the data won't be available for such companies.
+
+4. Data Might Be Missing for Specific Filing Periods
+Reason: A company might fail to report or tag shares outstanding in certain filings (e.g., older filings, incomplete filings).
+Details:
+Incomplete or amended filings may not include all required tags.
+Shares outstanding might not have been consistently reported in earlier years when XBRL tagging 
+requirements were less stringent (pre-2018 for smaller companies).
+
+
+There are several reasons why some companies might not have data available when querying the SEC's Company Concept API (e.g., for CommonStockSharesOutstanding) using:
+
+ruby
+Copy code
+https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/CommonStockSharesOutstanding.json
+Here are the main reasons:
+
+1. The Company Does Not File XBRL Data for That Concept
+Reason: Not all companies report us-gaap:CommonStockSharesOutstanding explicitly in their filings. While XBRL tagging is required, some companies may report the same information under different tags or concepts (e.g., custom tags).
+Details:
+Instead of us-gaap:CommonStockSharesOutstanding, the company may use a custom taxonomy like abc:SharesOutstanding.
+The Company Concept API only works with standard tags like us-gaap:CommonStockSharesOutstanding. Custom tags are not included.
+2. Shares Outstanding May Be Reported Indirectly
+Reason: Some companies do not explicitly tag shares outstanding using XBRL concepts like CommonStockSharesOutstanding. Instead:
+Shares outstanding may be included in narrative text (e.g., footnotes, tables) without being separately tagged.
+The Company Concept API cannot retrieve untagged or narrative data.
+3. Foreign Private Issuers and Form 20-F Filers
+Reason: Foreign private issuers that file annual reports on Form 20-F or other forms may not use the same XBRL taxonomy.
+Details:
+These companies may use the IFRS taxonomy (instead of US GAAP).
+The API only works for filings tagged using the US GAAP taxonomy, so the data won't be available for such companies.
+4. Data Might Be Missing for Specific Filing Periods
+Reason: A company might fail to report or tag shares outstanding in certain filings (e.g., older filings, incomplete filings).
+Details:
+Incomplete or amended filings may not include all required tags.
+Shares outstanding might not have been consistently reported in earlier years when XBRL tagging requirements were less stringent (pre-2018 for smaller companies).
+5. Company Did Not File as Publicly Traded
+Reason: Companies that recently went public or were private during earlier periods may not have historical filings tagged with shares outstanding.
+Details:
+For companies that recently IPO’d, data may only be available for filings after going public.
+6. Query Errors or CIK Mismatch
+Reason: If the CIK is incorrect or if there's a mismatch in the company identifier, the API will not return any data.
+Details:
+The Company Concept API is sensitive to accurate CIKs and standard tags. Ensure the CIK matches the company's SEC records.
+
+How to Work Around This
+Option 1: Use Custom Taxonomies
+Check the company’s XBRL filing manually (via the submissions.json endpoint or XBRL instance file) to determine if they use
+a custom tag for shares outstanding.
+Example: Instead of us-gaap:CommonStockSharesOutstanding, the company may use something like abc:CommonSharesOutstanding.
+
+Option 2: Parse Text in Filings
+If XBRL data is unavailable, look for shares outstanding in the narrative sections of the filings 
+(e.g., "Capitalization Table" or "Common Stock Outstanding").
+
+Option 3: Explore Other APIs or Data Sources
+For foreign issuers or companies with inconsistent filings, try querying other forms like DEF 14A (proxy statements), 
+which also often include shares outstanding.
