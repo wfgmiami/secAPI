@@ -23,10 +23,9 @@ companyTickers = requests.get(
 companyData = pd.DataFrame.from_dict(companyTickers.json(), orient="index")
 companyData["cik_str"] = companyData["cik_str"].astype(str).str.zfill(10)
 
-ticker = "STZ"
-ticker = "ICE"
+ticker = "BKR"
+
 cik = companyData[companyData["ticker"] == f"{ticker}"]["cik_str"][0]
-# cik = companyData[0:1].cik_str[0]
 
 filingMetadata = requests.get(
     f"https://data.sec.gov/submissions/CIK{cik}.json", headers=headers

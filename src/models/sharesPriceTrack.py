@@ -34,15 +34,16 @@ def adjust_to_next_business_day(target_date, holiday_list):
 with open("../data/tickers.json", "r") as file:
     tickers_object = json.load(file)
 
-tickers = tickers_object["S&P500"][:41]
+tickers = tickers_object["S&P500"][40:70]
 # S&P500
 # Watch
 # Robinhood
 # Best2016
 # ChatGPT_122224_20_30_toBeDiversified
 
-# companyFacts.headers.get("Content-Type") not "application/json":
-# first 20 in S&P500 were good except AMD, AES
+# Tickers with share track error msg - companyFacts.headers.get("Content-Type") not "application/json":
+# BKR
+
 # tickers = [
 #     "MMM",
 #     "ADBE",
@@ -60,17 +61,33 @@ companyData["cik_str"] = companyData["cik_str"].astype(str).str.zfill(10)
 
 # shareType = "CommonStockSharesOutstanding"
 shareType = "WeightedAverageNumberOfSharesOutstandingBasic"
+# shareType = "WeightedAverageNumberOfDilutedSharesOutstanding"
 
 numQters = 16  # last 4 years
 sh_decreased_tickers = {}
 sharesByQtrs = pd.DataFrame()
 dfs = []
 no_data_tickers = []
-# ticker = "ICE"
+ticker = "BKNG"
+
+# companyFacts = requests.get(
+#     f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", headers=headers
+# )
+
+# usGAAP = companyFacts.json()["facts"]["us-gaap"].keys()
+
+# usGAAP_df = pd.DataFrame(usGAAP, columns=["Values"])
+
+# usGAAP_sharerepurchase = usGAAP_df[
+#     usGAAP_df["Values"].str.contains("sharerepurchase", case=False, na=False)
+# ]
+# usGAAP_shares = usGAAP_df[
+#     usGAAP_df["Values"].str.contains("shares", case=False, na=False)
+# ]
 
 for ticker in tickers:
     # print(f"{ticker}")
-
+    shareType = "WeightedAverageNumberOfSharesOutstandingBasic"
     filtered_data = companyData[companyData["ticker"] == f"{ticker}"]
 
     if not filtered_data.empty and "cik_str" in filtered_data.columns:
@@ -84,6 +101,20 @@ for ticker in tickers:
             headers=headers,
         )
 
+        if companyConcept.headers.get("Content-Type") != "application/json":
+            shareType = "CommonStockSharesOutstanding"
+
+            if ticker == "BKR":
+                shareType = "WeightedAverageNumberOfDilutedSharesOutstanding"
+
+            companyConcept = requests.get(
+                (
+                    f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}"
+                    f"/us-gaap/{shareType}.json"
+                ),
+                headers=headers,
+            )
+
         if companyConcept.headers.get("Content-Type") == "application/json":
             sharesData = pd.DataFrame.from_dict(
                 (companyConcept.json()["units"]["shares"])
@@ -96,12 +127,20 @@ for ticker in tickers:
                 )
             ]
 
-            sharesFilings = (
-                sharesFilings.groupby(["start", "end", "val"], sort=False)
-                .first()
-                .reset_index()[["start", "end", "val", "fy", "form", "frame"]]
-            )
+            if shareType == "WeightedAverageNumberOfSharesOutstandingBasic":
+                sharesFilings = (
+                    sharesFilings.groupby(["start", "end", "val"], sort=False)
+                    .first()
+                    .reset_index()[["start", "end", "val", "fy", "form", "frame"]]
+                )
+            elif shareType == "CommonStockSharesOutstanding":
+                sharesFilings = (
+                    sharesFilings.groupby(["end", "val"], sort=False)
+                    .first()
+                    .reset_index()[["end", "val", "fy", "form", "frame"]]
+                )
 
+            sharesFilings = sharesFilings.copy()
             sharesFilings["fy"] = sharesFilings.apply(
                 lambda row: (
                     str(row["fy"])[2:]
@@ -202,7 +241,7 @@ endDateOffset = adjust_to_next_business_day(
 # In case of a specific date: Year, Month, Day
 # current_date = date(2016, 12, 30)  # must be business date
 # return_periods = ["YTD"]
-return_periods = ["YTD", "OneYear", "TwoYears"]
+return_periods = ["YTD", "OneYear", "TwoYears", "FiveYears"]
 perf_rank = {}
 
 
@@ -334,6 +373,10 @@ for ticker in tickers:
             begDate = adjust_to_next_business_day(
                 endDate - timedelta(days=730), us_holidays
             )
+        elif period == "FiveYears":
+            begDate = adjust_to_next_business_day(
+                endDate - timedelta(days=1825), us_holidays
+            )
 
         begDateOffset = adjust_to_next_business_day(
             (begDate + relativedelta(days=1)), us_holidays
@@ -354,7 +397,8 @@ perf_rank = {
 perf_rank_df = pd.DataFrame.from_dict(perf_rank, orient="index")
 
 sharesPriceTrack = pd.concat(
-    [perf_rank_df[["YTD", "OneYear", "TwoYears"]], shares_reduction_slope], axis=1
+    [perf_rank_df[["YTD", "OneYear", "TwoYears", "FiveYears"]], shares_reduction_slope],
+    axis=1,
 )
 
 print(sharesPriceTrack)
